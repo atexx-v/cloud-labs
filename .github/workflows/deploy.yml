@@ -39,6 +39,8 @@ jobs:
   # CD
   deploy:
     needs: test
+    # Поки AWS не розгорнуто і змінна AWS_ROLE_ARN не задана — деплой пропускається
+    if: vars.AWS_ROLE_ARN != ''
     # ARM-runner: образ збирається нативно під ARM64, як у Fargate (без емуляції)
     runs-on: ubuntu-24.04-arm
     # Два деплої одночасно не запускаються — другий чекає першого
