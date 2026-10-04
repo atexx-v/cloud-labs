@@ -1,0 +1,14 @@
+# Те, що не повинно потрапити в образ: секрети, історія git,
+# локальне середовище, тести та інфраструктура
+.git
+.github
+.env
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+tests
+terraform
+loadtest
+docs
+README.md

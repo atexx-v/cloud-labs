@@ -1,0 +1,40 @@
+# Локальний запуск: застосунок + PostgreSQL однією командою
+#   cp .env.example .env    (один раз, потім змінити пароль)
+#   docker compose up -d --build
+# Значення ${...} Compose бере з файлу .env, який не комітиться в git.
+
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"   # публікуємо лише порт API — його бачить користувач
+    environment:
+      # "db" — ім'я сервісу нижче; вбудований DNS Docker перетворює його на IP
+      # контейнера бази. localhost тут не спрацював би: у контейнера свій localhost.
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    depends_on:
+      db:
+        # Чекаємо не просто запуску контейнера, а готовності Postgres приймати
+        # з'єднання — інакше міграції при старті впали б
+        condition: service_healthy
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      # :? — Compose відмовиться стартувати, якщо змінна не задана в .env
+      POSTGRES_USER: ${POSTGRES_USER:?задайте POSTGRES_USER у .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD у .env}
+      POSTGRES_DB: ${POSTGRES_DB:?задайте POSTGRES_DB у .env}
+    # ports НЕ публікуємо: база доступна лише застосунку всередині мережі Compose
+    volumes:
+      # Іменований volume живе окремо від контейнера —
+      # дані переживають `docker compose down` (зникають лише з `down -v`)
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:

@@ -1,0 +1,91 @@
+# Continuous deployment (лаба 1, завдання 5):
+# push у main → тести → збірка образу → ECR з тегом = хеш коміту → оновлення ECS
+
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # ручний запуск — для першого деплою після terraform apply
+
+# id-token: write — дозволяє запуску отримати OIDC-токен від GitHub,
+# який AWS обмінює на тимчасові облікові дані ролі. Ключів доступу немає.
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: eu-central-1
+  # Імена мають збігатися з ресурсами в terraform/app (var.project = "cloud-labs")
+  ECR_REPOSITORY: cloud-labs
+  ECS_CLUSTER: cloud-labs
+  ECS_SERVICE: cloud-labs
+  TASK_FAMILY: cloud-labs
+  CONTAINER_NAME: app
+
+jobs:
+  # CI: зламаний код не дійде до продакшену — деплой стартує лише після тестів
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - run: pytest -q
+
+  # CD
+  deploy:
+    needs: test
+    # ARM-runner: образ збирається нативно під ARM64, як у Fargate (без емуляції)
+    runs-on: ubuntu-24.04-arm
+    # Два деплої одночасно не запускаються — другий чекає першого
+    concurrency:
+      group: deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Отримати тимчасові облікові дані AWS через OIDC
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Логін у ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Зібрати і завантажити образ
+        id: image
+        env:
+          # Тег = повний хеш коміту: однозначно видно, який код запущений,
+          # і можна відкотитись, задеплоївши образ попереднього коміту
+          IMAGE: ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+        run: |
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
+      - name: Взяти поточну task definition
+        run: |
+          aws ecs describe-task-definition --task-definition "$TASK_FAMILY" \
+            --query taskDefinition > task-definition.json
+
+      - name: Підставити новий образ
+        id: render
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ steps.image.outputs.image }}
+
+      - name: Задеплоїти нову ревізію і дочекатись стабільності
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render.outputs.task-definition }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          service: ${{ env.ECS_SERVICE }}
+          wait-for-service-stability: true

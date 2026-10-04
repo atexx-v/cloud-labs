@@ -1,0 +1,2 @@
+# Скопіюйте у terraform.tfvars (він у .gitignore)
+github_repo = "your-github-login/cloud-labs"
