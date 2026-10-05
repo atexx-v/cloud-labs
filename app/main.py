@@ -28,7 +28,7 @@ def health():
     вважав би нездоровими ВСІ екземпляри і почав би їх перезапускати —
     це не допомогло б, а лише додало б простою.
     """
-    return {"status": "ok", "instance": INSTANCE}
+    return {"status": "ok", "instance": INSTANCE, "demo": "зміна коду задеплоєна автоматично"}
 
 
 @app.get("/", include_in_schema=False)
