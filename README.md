@@ -105,7 +105,12 @@ terraform output app_url
 Після першого `apply` сервіс ще не має образу (тег `bootstrap`). Перший `gh workflow run`
 збирає образ, кладе його в ECR і оновлює сервіс. Далі кожен push у `main` деплоїться автоматично.
 
-Прибрати все: `terraform destroy` у `terraform/app` (бюджет у `terraform/account` можна лишити — він безкоштовний).
+Прибрати все:
+```bash
+cd terraform/app && terraform destroy
+./scripts/cleanup-task-definitions.sh   # ревізії task definition, створені CI (їх Terraform не знає)
+```
+Бюджет у `terraform/account` можна лишити — він безкоштовний.
 
 ## Тести
 
