@@ -10,9 +10,21 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
-class UserCreate(BaseModel):
+class UserRegister(BaseModel):
     email: EmailStr
     name: str = Field(min_length=1, max_length=100)
+    # Верхня межа — щоб не віддавати величезні рядки на дорогий хеш (DoS)
+    password: str = Field(min_length=8, max_length=128)
+
+
+class LoginIn(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=1, max_length=128)
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
 
 
 class UserOut(BaseModel):
@@ -28,7 +40,7 @@ class UserOut(BaseModel):
 class PostCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     body: str = Field(min_length=1)
-    author_id: int = Field(gt=0)
+    # author_id тут немає: автор — це користувач із токена, його не можна підставити в запиті
 
 
 class PostOut(BaseModel):

@@ -2,6 +2,7 @@ import os
 
 # Змінну треба задати ДО імпорту app: config.py читає її при імпорті
 os.environ.setdefault("DATABASE_URL", "sqlite://")
+os.environ.setdefault("JWT_SECRET", "test-secret-test-secret-test-secret-0123")
 
 import pytest
 from fastapi.testclient import TestClient
