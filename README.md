@@ -9,26 +9,41 @@ _(адреса балансувальника змінюється після `t
 
 ## Ендпоінти
 
-| Метод | Шлях | Опис | Коди |
-|---|---|---|---|
-| GET | `/health` | Health check для балансувальника + ім'я екземпляра | 200 |
-| POST | `/users` | Створити користувача `{email, name}` | 201, 409 email зайнятий, 422 |
-| GET | `/users?limit=&offset=` | Список користувачів | 200 |
-| GET | `/users/{id}` | Користувач (дані автора) | 200, 404 |
-| GET | `/users/{id}/posts` | Пости користувача | 200, 404 |
-| POST | `/posts` | Створити пост `{title, body, author_id}` | 201, 404 автора немає, 422 |
-| GET | `/posts?limit=&offset=` | Список постів, найновіші першими | 200 |
-| GET | `/posts/{id}` | Пост за id | 200, 404 |
-| DELETE | `/posts/{id}` | Видалити пост | 204, 404 |
+Читання відкрите всім, запис потребує JWT-токена (`Authorization: Bearer <токен>`).
+Без токена захищені ендпоінти повертають **401**.
 
-`limit` — від 1 до 100 (за замовчуванням 20).
+| Метод | Шлях | Опис | Автент. | Коди |
+|---|---|---|---|---|
+| GET | `/health` | Health check для балансувальника + ім'я екземпляра | — | 200 |
+| POST | `/auth/register` | Реєстрація `{email, name, password≥8}` | — | 201, 409 email зайнятий, 422 |
+| POST | `/auth/login` | Вхід `{email, password}` → `{access_token}` (діє 60 хв) | — | 200, 401 |
+| GET | `/auth/me` | Поточний користувач | ✔ | 200, 401 |
+| GET | `/users?limit=&offset=` | Список користувачів | — | 200 |
+| GET | `/users/{id}` | Користувач (дані автора) | — | 200, 404 |
+| GET | `/users/{id}/posts` | Пости користувача | — | 200, 404 |
+| POST | `/posts` | Створити пост `{title, body}`; автор — власник токена | ✔ | 201, 401, 422 |
+| GET | `/posts?limit=&offset=` | Список постів, найновіші першими | — | 200 |
+| GET | `/posts/{id}` | Пост за id | — | 200, 404 |
+| DELETE | `/posts/{id}` | Видалити власний пост | ✔ | 204, 401, 403 чужий, 404 |
+
+`limit` — від 1 до 100 (за замовчуванням 20). У Swagger UI (`/docs`) кнопка **Authorize** підставляє токен.
+
+Паролі зберігаються як scrypt-хеш із сіллю. Ключ підпису JWT (`JWT_SECRET`) в AWS генерує Terraform
+і кладе в Secrets Manager; локально береться з `.env`.
+
+## Моніторинг
+
+CloudWatch: логи контейнера (`/ecs/cloud-labs`), дашборд `cloud-labs` (запити, 5xx, латентність p50/p95/p99,
+CPU, пам'ять, здорові екземпляри, останні логи) і два алерти на email через SNS — помилки 5xx та
+нездорові екземпляри. Усе в `terraform/app/monitoring.tf`. Після `apply` треба підтвердити підписку
+SNS у листі від AWS.
 
 ## Локальний запуск
 
 Потрібен лише Docker Desktop — Python на хості не потрібен.
 
 ```bash
-cp .env.example .env          # один раз; змінити пароль
+cp .env.example .env          # один раз; змінити пароль і JWT_SECRET (openssl rand -hex 32)
 docker compose up -d --build
 ```
 
@@ -39,10 +54,12 @@ docker compose up -d --build
 
 Приклад:
 ```bash
-curl -X POST localhost:8000/users -H "Content-Type: application/json" \
-  -d '{"email":"ann@example.com","name":"Ann"}'
-curl -X POST localhost:8000/posts -H "Content-Type: application/json" \
-  -d '{"title":"Перший пост","body":"Привіт з контейнера","author_id":1}'
+curl -X POST localhost:8000/auth/register -H "Content-Type: application/json" \
+  -d '{"email":"ann@example.com","name":"Ann","password":"correct-horse"}'
+TOKEN=$(curl -s -X POST localhost:8000/auth/login -H "Content-Type: application/json" \
+  -d '{"email":"ann@example.com","password":"correct-horse"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+curl -X POST localhost:8000/posts -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" \
+  -d '{"title":"Перший пост","body":"Привіт з контейнера"}'
 curl localhost:8000/posts
 ```
 
@@ -105,6 +122,8 @@ pytest
 .
 ├── app/
 │   ├── main.py          # створення FastAPI, /health
+│   ├── security.py      # хешування паролів (scrypt), створення і перевірка JWT
+│   ├── auth.py          # залежність get_current_user (401 без дійсного токена)
 │   ├── config.py        # налаштування зі змінних середовища (DATABASE_URL або DB_*)
 │   ├── db.py            # підключення до БД, сесія на запит
 │   ├── models.py        # таблиці users і posts (SQLAlchemy)

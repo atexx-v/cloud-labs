@@ -2,30 +2,13 @@ from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import Post, User
-from app.schemas import PostOut, UserCreate, UserOut
+from app.schemas import PostOut, UserOut
 
 router = APIRouter(prefix="/users", tags=["users"])
-
-
-@router.post("", response_model=UserOut, status_code=201)
-def create_user(data: UserCreate, db: Session = Depends(get_db)):
-    user = User(email=data.email, name=data.name)
-    db.add(user)
-    try:
-        db.commit()
-    except IntegrityError:
-        # Ловимо саме IntegrityError, а не будь-який Exception:
-        # єдине обмеження таблиці users, яке можна порушити, — унікальний email.
-        # Інші помилки (наприклад, база недоступна) мають стати 500, а не 409.
-        db.rollback()
-        raise HTTPException(status_code=409, detail="Користувач з таким email уже існує")
-    db.refresh(user)  # підтягнути id і created_at, які згенерувала база
-    return user
 
 
 @router.get("", response_model=List[UserOut])

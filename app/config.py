@@ -20,6 +20,11 @@ class Settings(BaseSettings):
 
     database_url: Optional[str] = None
 
+    # Ключ підпису JWT. У хмарі його генерує Terraform і кладе в Secrets Manager;
+    # хто знає ключ — може випускати «справжні» токени, тому в коді його немає
+    jwt_secret: str
+    jwt_expires_minutes: int = 60
+
     db_host: Optional[str] = None
     db_port: int = 5432
     db_user: Optional[str] = None
@@ -36,6 +41,14 @@ class Settings(BaseSettings):
         # а в нас встановлений psycopg 3
         if v and v.startswith("postgresql://"):
             return v.replace("postgresql://", "postgresql+psycopg://", 1)
+        return v
+
+    @field_validator("jwt_secret")
+    @classmethod
+    def jwt_secret_long_enough(cls, v: str) -> str:
+        # HS256 безпечний лише з довгим випадковим ключем
+        if len(v) < 32:
+            raise ValueError("JWT_SECRET має бути не коротшим за 32 символи")
         return v
 
     @model_validator(mode="after")

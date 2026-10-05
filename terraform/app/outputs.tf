@@ -24,3 +24,8 @@ output "db_address" {
   description = "Адреса RDS — доступна лише зсередини VPC"
   value       = aws_db_instance.main.address
 }
+
+output "dashboard_url" {
+  description = "Дашборд моніторингу в консолі AWS"
+  value       = "https://${var.region}.console.aws.amazon.com/cloudwatch/home?region=${var.region}#dashboards:name=${aws_cloudwatch_dashboard.main.dashboard_name}"
+}

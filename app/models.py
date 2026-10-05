@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 from sqlalchemy import DateTime, ForeignKey, String, Text, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -19,6 +19,8 @@ class User(Base):
     # два одночасні запити з однаковим email не створять дубль
     email: Mapped[str] = mapped_column(String(255), unique=True)
     name: Mapped[str] = mapped_column(String(100))
+    # Хеш пароля (не сам пароль). NULL — для користувачів, створених до появи автентифікації
+    password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     # server_default — час ставить база, а не застосунок
     # (годинники різних екземплярів можуть розходитись)
     created_at: Mapped[datetime] = mapped_column(

@@ -51,3 +51,8 @@ variable "db_instance_class" {
   type    = string
   default = "db.t4g.micro" # найменший клас; Graviton (ARM) — дешевший
 }
+
+variable "alert_email" {
+  description = "Пошта для алертів моніторингу (після apply підтвердити підписку з листа AWS)"
+  type        = string
+}

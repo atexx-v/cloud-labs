@@ -34,11 +34,34 @@ resource "aws_iam_role_policy_attachment" "task_execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
-# Читати можна лише один секрет — пароль нашої бази (принцип найменших привілеїв)
+# Ключ підпису JWT (бонус 6). Генерується тут і ніколи не потрапляє в код чи git;
+# значення лежить у Secrets Manager, а в контейнер приходить змінною JWT_SECRET.
+# Увага: значення також є в стані Terraform (terraform.tfstate) — тому стан не комітиться.
+resource "random_password" "jwt" {
+  length  = 48
+  special = false # лише літери й цифри: безпечно передавати змінною середовища
+}
+
+resource "aws_secretsmanager_secret" "jwt" {
+  name = "${var.project}/jwt-secret"
+  # Негайне видалення: інакше після destroy ім'я секрету «зайняте» 7–30 днів,
+  # і наступний apply з нуля впаде
+  recovery_window_in_days = 0
+}
+
+resource "aws_secretsmanager_secret_version" "jwt" {
+  secret_id     = aws_secretsmanager_secret.jwt.id
+  secret_string = random_password.jwt.result
+}
+
+# Читати можна лише два секрети — пароль нашої бази і ключ JWT (принцип найменших привілеїв)
 data "aws_iam_policy_document" "read_db_secret" {
   statement {
-    actions   = ["secretsmanager:GetSecretValue"]
-    resources = [aws_db_instance.main.master_user_secret[0].secret_arn]
+    actions = ["secretsmanager:GetSecretValue"]
+    resources = [
+      aws_db_instance.main.master_user_secret[0].secret_arn,
+      aws_secretsmanager_secret.jwt.arn,
+    ]
   }
 }
 
@@ -109,10 +132,16 @@ resource "aws_ecs_task_definition" "app" {
 
     # Пароль: ECS сам читає його з Secrets Manager при старті задачі.
     # ":password::" — взяти з JSON-секрету лише поле password
-    secrets = [{
-      name      = "DB_PASSWORD"
-      valueFrom = "${aws_db_instance.main.master_user_secret[0].secret_arn}:password::"
-    }]
+    secrets = [
+      {
+        name      = "DB_PASSWORD"
+        valueFrom = "${aws_db_instance.main.master_user_secret[0].secret_arn}:password::"
+      },
+      {
+        name      = "JWT_SECRET"
+        valueFrom = aws_secretsmanager_secret.jwt.arn
+      },
+    ]
 
     # stdout контейнера → CloudWatch Logs
     logConfiguration = {

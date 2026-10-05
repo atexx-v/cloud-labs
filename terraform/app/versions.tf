@@ -5,6 +5,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 6.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
+    }
   }
   # Стан (terraform.tfstate) зберігається локально і НЕ комітиться:
   # у ньому є ідентифікатори ресурсів і можуть бути чутливі дані.

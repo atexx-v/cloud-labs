@@ -3,7 +3,7 @@ import socket
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 
-from app.routers import posts, users
+from app.routers import auth, posts, users
 
 app = FastAPI(
     title="Mini Blog API",
@@ -11,6 +11,7 @@ app = FastAPI(
     description="REST API для лабораторних з хмарних технологій: користувачі та їхні пости.",
 )
 
+app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(posts.router)
 
