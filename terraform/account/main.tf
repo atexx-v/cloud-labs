@@ -48,6 +48,12 @@ resource "aws_budgets_budget" "monthly" {
   limit_unit   = "USD"
   time_unit    = "MONTHLY"
 
+  # Рахуємо витрати ДО вирахування кредитів. Інакше поки діють кредити ($100)
+  # бюджет показував би $0, і попередження про забуті ресурси не надійшло б
+  cost_types {
+    include_credit = false
+  }
+
   # Лист, коли фактично витрачено половину ліміту
   notification {
     comparison_operator        = "GREATER_THAN"
