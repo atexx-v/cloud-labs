@@ -1,2 +1,4 @@
 # Скопіюйте у terraform.tfvars (він у .gitignore)
 github_repo = "your-github-login/cloud-labs"
+# gh api repos/<власник>/<репо>/actions/oidc/customization/sub  → sub_claim_prefix
+github_oidc_subject_prefix = "repo:your-login@000/cloud-labs@000"

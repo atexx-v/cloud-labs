@@ -26,11 +26,13 @@ data "aws_iam_policy_document" "github_assume" {
       variable = "token.actions.githubusercontent.com:aud"
       values   = ["sts.amazonaws.com"]
     }
-    # Лише наш репозиторій і лише гілка main: workflow з форку чи іншої гілки роль не отримає
+    # Лише наш репозиторій і лише гілка main: workflow з форку чи іншої гілки роль не отримає.
+    # Префікс — незмінний (з id репозиторію): якщо власник перейменує репо, а ім'я займе
+    # хтось інший, старий trust policy на нього не поширюється
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_repo}:ref:refs/heads/main"]
+      values   = ["${var.github_oidc_subject_prefix}:ref:refs/heads/main"]
     }
   }
 }
