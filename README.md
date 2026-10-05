@@ -3,7 +3,7 @@
 REST API «міні-блог»: користувачі та їхні пости. Python 3.12, FastAPI, SQLAlchemy 2, Alembic, PostgreSQL 16.
 Запускається локально через Docker Compose, у хмарі — AWS (ECS Fargate + RDS + ALB, Terraform).
 
-**Публічна адреса:** http://cloud-labs-alb-1943946083.eu-central-1.elb.amazonaws.com
+**Публічна адреса:** http://cloud-labs-alb-440087125.eu-central-1.elb.amazonaws.com
 _(адреса балансувальника змінюється після `terraform destroy` + `apply`; актуальна — `terraform output app_url`. Після захисту ресурси видаляються, тож адреса може бути недоступна.)_
 **Документація API (Swagger UI):** `/docs`
 
