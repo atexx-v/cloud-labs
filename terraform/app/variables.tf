@@ -14,6 +14,15 @@ variable "github_repo" {
   type        = string
 }
 
+variable "github_oidc_subject_prefix" {
+  description = <<-EOT
+    Префікс sub-claim OIDC-токена GitHub для цього репозиторію. Новим репозиторіям GitHub видає
+    незмінний формат з числовими id: repo:<власник>@<id>/<репо>@<id>. Дізнатись:
+    gh api repos/<власник>/<репо>/actions/oidc/customization/sub  → поле sub_claim_prefix
+  EOT
+  type        = string
+}
+
 variable "image_tag" {
   description = "Тег образу для першого запуску. Далі тег (хеш коміту) підставляє CI"
   type        = string
