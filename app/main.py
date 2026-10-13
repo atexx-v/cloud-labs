@@ -15,8 +15,6 @@ app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(posts.router)
 
-# Ім'я хоста контейнера — у кожного екземпляра своє.
-# Видно, який саме екземпляр відповів (зручно показувати балансувальник і автоскейл)
 INSTANCE = socket.gethostname()
 
 
