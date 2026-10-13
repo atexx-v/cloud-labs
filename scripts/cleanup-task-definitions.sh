@@ -17,7 +17,7 @@ done
 inactive=$(aws ecs list-task-definitions --region "$REGION" --family-prefix "$FAMILY" \
   --status INACTIVE --query 'taskDefinitionArns' --output text)
 if [ -n "$inactive" ] && [ "$inactive" != "None" ]; then
-  # shellcheck disable=SC2086
-  aws ecs delete-task-definitions --region "$REGION" --task-definitions $inactive >/dev/null
+  # API видаляє не більше 10 ревізій за виклик
+  echo "$inactive" | tr '\t' '\n' | xargs -n 10 aws ecs delete-task-definitions --region "$REGION" --task-definitions >/dev/null
   echo "deleted inactive revisions"
 fi
