@@ -213,7 +213,7 @@ resource "aws_ecs_service" "app" {
   }
 
   # Listener має існувати раніше за сервіс, інакше ECS не зможе підключитись до ALB
-  depends_on = [aws_lb_listener.https, terraform_data.cleanup_task_definitions]
+  depends_on = [aws_lb_listener.http, aws_lb_listener.https, terraform_data.cleanup_task_definitions]
 
   lifecycle {
     # Нові ревізії task definition (з новим тегом образу) реєструє CI.

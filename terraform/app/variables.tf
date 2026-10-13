@@ -23,14 +23,21 @@ variable "github_oidc_subject_prefix" {
   type        = string
 }
 
+# HTTPS необов'язковий: порожній app_hostname = звичайний HTTP на адресі балансувальника.
 variable "domain_name" {
-  description = "Домен із DNS-зоною, створеною в terraform/account (напр. example.com)"
+  description = "Домен із DNS-зоною, створеною в terraform/account (напр. example.com). Порожнє = без HTTPS"
   type        = string
+  default     = ""
 }
 
 variable "app_hostname" {
-  description = "Повне ім'я застосунку, на яке видано сертифікат (напр. lab.example.com)"
+  description = "Повне ім'я застосунку, на яке видано сертифікат (напр. lab.example.com). Порожнє = без HTTPS"
   type        = string
+  default     = ""
+}
+
+locals {
+  https = var.app_hostname != "" && var.domain_name != ""
 }
 
 variable "image_tag" {

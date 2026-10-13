@@ -27,9 +27,10 @@ resource "aws_security_group" "db" {
 
 # --- ALB ---
 
-# Єдині правила в усьому проєкті, відкриті для всього інтернету: 443 (сам застосунок)
-# і 80 (лише перенаправлення на HTTPS)
+# Єдині правила в усьому проєкті, відкриті для всього інтернету: 80 (HTTP) і, якщо увімкнено HTTPS,
+# 443 (тоді порт 80 лише перенаправляє на нього)
 resource "aws_vpc_security_group_ingress_rule" "alb_https" {
+  count             = local.https ? 1 : 0
   security_group_id = aws_security_group.alb.id
   description       = "HTTPS from anywhere"
   cidr_ipv4         = "0.0.0.0/0"

@@ -1,5 +1,6 @@
 # Скопіюйте у terraform.tfvars (він у .gitignore) і впишіть свою пошту
 budget_email     = "you@example.com"
 budget_limit_usd = 10
-domain_name      = "example.com"
-app_hostname     = "lab.example.com"
+# HTTPS (необов'язково, потрібен свій домен):
+# domain_name  = "example.com"
+# app_hostname = "lab.example.com"
