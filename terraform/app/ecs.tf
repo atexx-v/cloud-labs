@@ -155,6 +155,31 @@ resource "aws_ecs_task_definition" "app" {
   }])
 }
 
+# --- Очищення ревізій task definition під час `terraform destroy` ---
+# Terraform створює лише першу ревізію task definition, а кожен деплой через GitHub Actions
+# реєструє нову, про яку Terraform не знає. Без цього ресурсу вони лишались би в акаунті
+# після `destroy` (безкоштовно, але методичка вимагає «destroy без залишку»).
+# Сервіс залежить від цього ресурсу, тому при знищенні спочатку зупиняється сервіс,
+# а вже потім виконується очищення. on_failure = continue: збій очищення не блокує destroy.
+resource "terraform_data" "cleanup_task_definitions" {
+  input = {
+    region = var.region
+    family = var.project
+  }
+
+  provisioner "local-exec" {
+    when        = destroy
+    on_failure  = continue
+    interpreter = ["/bin/sh", "-c"]
+    command     = <<-EOT
+      for arn in $(aws ecs list-task-definitions --region ${self.input.region} --family-prefix ${self.input.family} --status ACTIVE --query 'taskDefinitionArns' --output text); do
+        aws ecs deregister-task-definition --region ${self.input.region} --task-definition "$arn" >/dev/null
+      done
+      aws ecs list-task-definitions --region ${self.input.region} --family-prefix ${self.input.family} --status INACTIVE --query 'taskDefinitionArns' --output text | tr '\t' '\n' | xargs -n 10 aws ecs delete-task-definitions --region ${self.input.region} --task-definitions >/dev/null
+    EOT
+  }
+}
+
 # --- Service: тримає потрібну кількість запущених задач ---
 
 resource "aws_ecs_service" "app" {
@@ -188,7 +213,7 @@ resource "aws_ecs_service" "app" {
   }
 
   # Listener має існувати раніше за сервіс, інакше ECS не зможе підключитись до ALB
-  depends_on = [aws_lb_listener.http]
+  depends_on = [aws_lb_listener.http, terraform_data.cleanup_task_definitions]
 
   lifecycle {
     # Нові ревізії task definition (з новим тегом образу) реєструє CI.
