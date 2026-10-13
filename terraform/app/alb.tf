@@ -35,12 +35,13 @@ resource "aws_lb_target_group" "app" {
 # HTTPS: шифрування між користувачем і балансувальником. TLS закінчується на ALB, а всередині
 # приватної мережі ALB передає запит контейнеру звичайним HTTP (так прийнято: мережа закрита).
 resource "aws_lb_listener" "https" {
+  count             = local.https ? 1 : 0
   load_balancer_arn = aws_lb.main.arn
   port              = 443
   protocol          = "HTTPS"
   # Сучасна політика: TLS 1.2 і 1.3, без застарілих шифрів
   ssl_policy      = "ELBSecurityPolicy-TLS13-1-2-2021-06"
-  certificate_arn = data.aws_acm_certificate.app.arn
+  certificate_arn = data.aws_acm_certificate.app[0].arn
 
   default_action {
     type             = "forward"
@@ -48,18 +49,29 @@ resource "aws_lb_listener" "https" {
   }
 }
 
-# Порт 80 лишається лише для того, щоб перенаправити на HTTPS (301), а не віддавати дані відкрито
+# Порт 80: з HTTPS лише перенаправляє на нього (301), без HTTPS віддає застосунок напряму
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.main.arn
   port              = 80
   protocol          = "HTTP"
 
-  default_action {
-    type = "redirect"
-    redirect {
-      port        = "443"
-      protocol    = "HTTPS"
-      status_code = "HTTP_301"
+  dynamic "default_action" {
+    for_each = local.https ? [] : [1]
+    content {
+      type             = "forward"
+      target_group_arn = aws_lb_target_group.app.arn
+    }
+  }
+
+  dynamic "default_action" {
+    for_each = local.https ? [1] : []
+    content {
+      type = "redirect"
+      redirect {
+        port        = "443"
+        protocol    = "HTTPS"
+        status_code = "HTTP_301"
+      }
     }
   }
 }

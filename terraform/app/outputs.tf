@@ -1,6 +1,6 @@
 output "app_url" {
-  description = "Публічна адреса застосунку (HTTPS, ім'я з вашого домену)"
-  value       = "https://${var.app_hostname}"
+  description = "Публічна адреса застосунку: HTTPS з вашим іменем (якщо задано домен) або HTTP на адресі ALB"
+  value       = local.https ? "https://${var.app_hostname}" : "http://${aws_lb.main.dns_name}"
 }
 
 output "ecr_repository_url" {
