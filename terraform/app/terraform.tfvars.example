@@ -3,3 +3,5 @@ github_repo = "your-github-login/cloud-labs"
 # gh api repos/<власник>/<репо>/actions/oidc/customization/sub  → sub_claim_prefix
 github_oidc_subject_prefix = "repo:your-login@000/cloud-labs@000"
 alert_email = "you@example.com"
+domain_name  = "example.com"
+app_hostname = "lab.example.com"

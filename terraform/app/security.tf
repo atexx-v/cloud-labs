@@ -27,10 +27,20 @@ resource "aws_security_group" "db" {
 
 # --- ALB ---
 
-# Єдине правило в усьому проєкті, відкрите для всього інтернету
+# Єдині правила в усьому проєкті, відкриті для всього інтернету: 443 (сам застосунок)
+# і 80 (лише перенаправлення на HTTPS)
+resource "aws_vpc_security_group_ingress_rule" "alb_https" {
+  security_group_id = aws_security_group.alb.id
+  description       = "HTTPS from anywhere"
+  cidr_ipv4         = "0.0.0.0/0"
+  ip_protocol       = "tcp"
+  from_port         = 443
+  to_port           = 443
+}
+
 resource "aws_vpc_security_group_ingress_rule" "alb_http" {
   security_group_id = aws_security_group.alb.id
-  description       = "HTTP from anywhere"
+  description       = "HTTP from anywhere (redirects to HTTPS)"
   cidr_ipv4         = "0.0.0.0/0"
   ip_protocol       = "tcp"
   from_port         = 80

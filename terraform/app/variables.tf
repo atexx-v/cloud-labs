@@ -23,6 +23,16 @@ variable "github_oidc_subject_prefix" {
   type        = string
 }
 
+variable "domain_name" {
+  description = "Домен із DNS-зоною, створеною в terraform/account (напр. example.com)"
+  type        = string
+}
+
+variable "app_hostname" {
+  description = "Повне ім'я застосунку, на яке видано сертифікат (напр. lab.example.com)"
+  type        = string
+}
+
 variable "image_tag" {
   description = "Тег образу для першого запуску. Далі тег (хеш коміту) підставляє CI"
   type        = string
