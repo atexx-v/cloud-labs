@@ -3,8 +3,8 @@
 REST API «міні-блог»: користувачі та їхні пости. Python 3.12, FastAPI, SQLAlchemy 2, Alembic, PostgreSQL 16.
 Запускається локально через Docker Compose, у хмарі — AWS (ECS Fargate + RDS + ALB, Terraform).
 
-**Публічна адреса:** http://cloud-labs-alb-440087125.eu-central-1.elb.amazonaws.com
-_(адреса балансувальника змінюється після `terraform destroy` + `apply`; актуальна — `terraform output app_url`. Після захисту ресурси видаляються, тож адреса може бути недоступна.)_
+**Публічна адреса:** https://<app_hostname> (ім'я з вашого домену, див. розділ «HTTPS і домен»; актуальна адреса — `terraform output app_url`).
+_(Після `terraform destroy` застосунок недоступний; ім'я в DNS лишається, а запис на балансувальник створюється разом з ним.)_
 **Документація API (Swagger UI):** `/docs`
 
 ## Ендпоінти
@@ -66,7 +66,7 @@ curl localhost:8000/posts
 ## Архітектура в AWS
 
 ```
-Інтернет ──:80──▶ ALB (публічні підмережі, 2 зони)
+Інтернет ──:443 HTTPS──▶ ALB (публічні підмережі, 2 зони; :80 лише перенаправляє на HTTPS)
                    │ health check /health
                    ▼ :8000
             ECS Fargate, ARM64 (приватні підмережі) ──:5432──▶ RDS PostgreSQL 16 (приватні підмережі)
@@ -76,10 +76,28 @@ curl localhost:8000/posts
 GitHub Actions ──OIDC──▶ IAM-роль ──▶ ECR (образ:хеш_коміту) ──▶ оновлення ECS service
 ```
 
+- Трафік між користувачем і балансувальником шифрується (HTTPS, сертифікат ACM). TLS закінчується на ALB, а всередині
+  приватної мережі запит іде контейнеру звичайним HTTP.
 - З інтернету видно лише балансувальник. Контейнери й база не мають публічних адрес.
 - Security group бази пускає лише security group застосунку, а та — лише security group ALB.
 - Пароль до бази генерує AWS (RDS managed password); ECS передає його в контейнер як `DB_PASSWORD`.
 - CI/CD не має збережених ключів: GitHub отримує тимчасові облікові дані через OIDC.
+
+## HTTPS і домен
+
+Сертифікат ACM видається лише на ім'я з вашого домену (на адресу `*.elb.amazonaws.com` AWS сертифікатів не видає),
+тому потрібен домен. DNS-зона та сертифікат створюються в `terraform/account` (живуть постійно, ≈ $0,5/міс за зону),
+а запис про адресу й HTTPS-listener на балансувальнику — в `terraform/app` (створюються й видаляються разом з ним).
+
+Один раз, перед першим розгортанням:
+```bash
+cd terraform/account                      # у terraform.tfvars вписати domain_name і app_hostname
+terraform init
+terraform apply -target=aws_route53_zone.main     # створити зону
+terraform output name_servers             # вписати ці 4 сервери імен у реєстратора домену
+# зачекати 5–30 хв, поки оновиться DNS, потім:
+terraform apply                           # видасть і підтвердить сертифікат
+```
 
 ## Розгортання з нуля
 
@@ -93,7 +111,7 @@ terraform init && terraform apply
 
 # 2. Уся інфраструктура лаби (~10–15 хв, найдовше створюється RDS)
 cd ../app
-cp terraform.tfvars.example terraform.tfvars   # вписати github_repo
+cp terraform.tfvars.example terraform.tfvars   # вписати github_repo, домен, пошту, github_oidc_subject_prefix
 terraform init && terraform apply
 
 # 3. Передати GitHub ARN ролі для деплою і запустити перший деплой

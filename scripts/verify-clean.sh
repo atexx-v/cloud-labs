@@ -20,4 +20,6 @@ printf '%-32s %s\n' "CloudWatch dashboards"    "$(q cloudwatch list-dashboards -
 printf '%-32s %s\n' "CloudWatch log groups"    "$(q logs describe-log-groups --region "$R" --query 'length(logGroups)')"
 printf '%-32s %s\n' "IAM roles cloud-labs*"     "$(q iam list-roles --query "Roles[?starts_with(RoleName,'cloud-labs')]|length(@)")"
 printf '%-32s %s\n' "OIDC providers"           "$(q iam list-open-id-connect-providers --query 'length(OpenIDConnectProviderList)')"
+printf '%-32s %s\n' "Route 53 zones (expected: 1)" "$(q route53 list-hosted-zones --query 'length(HostedZones)')"
+printf '%-32s %s\n' "ACM certificates (expected: 1)" "$(q acm list-certificates --region "$R" --query 'length(CertificateSummaryList)')"
 printf '%-32s %s\n' "Budgets (expected: 1)"     "$(q budgets describe-budgets --account-id "$(aws sts get-caller-identity --query Account --output text)" --query 'length(Budgets)')"

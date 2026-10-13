@@ -1,6 +1,6 @@
 output "app_url" {
-  description = "Публічна адреса застосунку (DNS-ім'я балансувальника)"
-  value       = "http://${aws_lb.main.dns_name}"
+  description = "Публічна адреса застосунку (HTTPS, ім'я з вашого домену)"
+  value       = "https://${var.app_hostname}"
 }
 
 output "ecr_repository_url" {
