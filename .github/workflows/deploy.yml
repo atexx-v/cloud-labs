@@ -67,8 +67,12 @@ jobs:
           # і можна відкотитись, задеплоївши образ попереднього коміту
           IMAGE: ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
         run: |
-          docker build -t "$IMAGE" .
-          docker push "$IMAGE"
+          if docker manifest inspect "$IMAGE" >/dev/null 2>&1; then
+            echo "Образ $IMAGE вже є в реєстрі, збірку пропущено"
+          else
+            docker build -t "$IMAGE" .
+            docker push "$IMAGE"
+          fi
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
 
       - name: Взяти поточну task definition
