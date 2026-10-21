@@ -1,10 +1,3 @@
-# Рівень акаунта: бюджет зі сповіщеннями.
-#
-# Окремо від terraform/app навмисно: app ми знищуємо після кожного заняття
-# (terraform destroy), а бюджет має стерегти акаунт ЗАВЖДИ — зокрема тоді,
-# коли щось забули видалити. Бюджет безкоштовний.
-# Це перше, що створюється в акаунті (вимога методички).
-
 terraform {
   required_version = ">= 1.9"
   required_providers {
@@ -48,13 +41,10 @@ resource "aws_budgets_budget" "monthly" {
   limit_unit   = "USD"
   time_unit    = "MONTHLY"
 
-  # Рахуємо витрати ДО вирахування кредитів. Інакше поки діють кредити ($100)
-  # бюджет показував би $0, і попередження про забуті ресурси не надійшло б
   cost_types {
     include_credit = false
   }
 
-  # Лист, коли фактично витрачено половину ліміту
   notification {
     comparison_operator        = "GREATER_THAN"
     threshold                  = 50
@@ -63,7 +53,6 @@ resource "aws_budgets_budget" "monthly" {
     subscriber_email_addresses = [var.budget_email]
   }
 
-  # Лист, коли ліміт перевищено
   notification {
     comparison_operator        = "GREATER_THAN"
     threshold                  = 100
@@ -72,7 +61,6 @@ resource "aws_budgets_budget" "monthly" {
     subscriber_email_addresses = [var.budget_email]
   }
 
-  # Лист заздалегідь: AWS прогнозує, що до кінця місяця ліміт буде перевищено
   notification {
     comparison_operator        = "GREATER_THAN"
     threshold                  = 100

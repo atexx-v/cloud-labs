@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Після `terraform destroy` і cleanup-task-definitions.sh: перевірка, що в AWS нічого не лишилось.
-# Усі лічильники мають бути 0 (бюджет: 1 — він живе окремо і безкоштовний).
 set -u
 R="${AWS_REGION:-eu-central-1}"
 q() { aws "$@" --output text 2>/dev/null || echo "?"; }
@@ -14,12 +12,7 @@ printf '%-32s %s\n' "ECS clusters"             "$(q ecs list-clusters --region "
 printf '%-32s %s\n' "ECS task definitions (ACTIVE)" "$(q ecs list-task-definitions --region "$R" --family-prefix cloud-labs --status ACTIVE --query 'length(taskDefinitionArns)')"
 printf '%-32s %s\n' "ECR repositories"          "$(q ecr describe-repositories --region "$R" --query 'length(repositories)')"
 printf '%-32s %s\n' "Secrets Manager"          "$(q secretsmanager list-secrets --region "$R" --query 'length(SecretList)')"
-printf '%-32s %s\n' "SNS topics"               "$(q sns list-topics --region "$R" --query 'length(Topics)')"
-printf '%-32s %s\n' "CloudWatch alarms"        "$(q cloudwatch describe-alarms --region "$R" --query 'length(MetricAlarms)')"
-printf '%-32s %s\n' "CloudWatch dashboards"    "$(q cloudwatch list-dashboards --region "$R" --query 'length(DashboardEntries)')"
 printf '%-32s %s\n' "CloudWatch log groups"    "$(q logs describe-log-groups --region "$R" --query 'length(logGroups)')"
 printf '%-32s %s\n' "IAM roles cloud-labs*"     "$(q iam list-roles --query "Roles[?starts_with(RoleName,'cloud-labs')]|length(@)")"
 printf '%-32s %s\n' "OIDC providers"           "$(q iam list-open-id-connect-providers --query 'length(OpenIDConnectProviderList)')"
-printf '%-32s %s\n' "Route 53 zones (1 if HTTPS)" "$(q route53 list-hosted-zones --query 'length(HostedZones)')"
-printf '%-32s %s\n' "ACM certs (1 if HTTPS)" "$(q acm list-certificates --region "$R" --query 'length(CertificateSummaryList)')"
 printf '%-32s %s\n' "Budgets (expected: 1)"     "$(q budgets describe-budgets --account-id "$(aws sts get-caller-identity --query Account --output text)" --query 'length(Budgets)')"

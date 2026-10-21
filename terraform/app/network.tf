@@ -1,27 +1,14 @@
-# Мережа (завдання 3).
-#
-#  Інтернет
-#     │
-#  [Internet Gateway]
-#     │
-#  Публічні підмережі (2 зони):  ALB, NAT Gateway
-#     │                          (єдине, що має вихід в інтернет напряму)
-#  Приватні підмережі (2 зони):  контейнери ECS, база RDS
-#                                (без публічних адрес; назовні — лише через NAT)
-
 data "aws_availability_zones" "available" {
   state = "available"
 }
 
 locals {
-  # Дві зони доступності: ALB і група підмереж RDS вимагають мінімум дві
   azs      = slice(data.aws_availability_zones.available.names, 0, 2)
   vpc_cidr = "10.0.0.0/16"
 }
 
 resource "aws_vpc" "main" {
-  cidr_block = local.vpc_cidr
-  # DNS-імена всередині VPC — щоб застосунок знаходив базу за адресою RDS
+  cidr_block           = local.vpc_cidr
   enable_dns_support   = true
   enable_dns_hostnames = true
 
@@ -33,7 +20,6 @@ resource "aws_internet_gateway" "main" {
   tags   = { Name = "${var.project}-igw" }
 }
 
-# 10.0.0.0/24, 10.0.1.0/24
 resource "aws_subnet" "public" {
   count             = 2
   vpc_id            = aws_vpc.main.id
@@ -42,7 +28,6 @@ resource "aws_subnet" "public" {
   tags              = { Name = "${var.project}-public-${local.azs[count.index]}" }
 }
 
-# 10.0.10.0/24, 10.0.11.0/24
 resource "aws_subnet" "private" {
   count             = 2
   vpc_id            = aws_vpc.main.id
@@ -51,10 +36,6 @@ resource "aws_subnet" "private" {
   tags              = { Name = "${var.project}-private-${local.azs[count.index]}" }
 }
 
-# NAT Gateway: контейнери в приватних підмережах ходять через нього назовні
-# (стягнути образ з ECR, прочитати секрет, писати логи), але ззовні до них
-# підключитись неможливо — NAT пропускає лише відповіді на вихідні з'єднання.
-# Один NAT на одну зону — дешевше; ціна: якщо зона впаде, вихід зникне (для лаби прийнятно).
 resource "aws_eip" "nat" {
   domain = "vpc"
   tags   = { Name = "${var.project}-nat" }
@@ -65,11 +46,9 @@ resource "aws_nat_gateway" "main" {
   subnet_id     = aws_subnet.public[0].id
   tags          = { Name = "${var.project}-nat" }
 
-  # Явна залежність: NAT без Internet Gateway не працює
   depends_on = [aws_internet_gateway.main]
 }
 
-# Що робить підмережу «публічною» — маршрут 0.0.0.0/0 через Internet Gateway
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
   route {
@@ -79,7 +58,6 @@ resource "aws_route_table" "public" {
   tags = { Name = "${var.project}-public" }
 }
 
-# «Приватна» — вихід назовні лише через NAT
 resource "aws_route_table" "private" {
   vpc_id = aws_vpc.main.id
   route {

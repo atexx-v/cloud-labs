@@ -1,6 +1,6 @@
 output "app_url" {
-  description = "Публічна адреса застосунку: HTTPS з вашим іменем (якщо задано домен) або HTTP на адресі ALB"
-  value       = local.https ? "https://${var.app_hostname}" : "http://${aws_lb.main.dns_name}"
+  description = "Публічна адреса застосунку (HTTP на адресі ALB)"
+  value       = "http://${aws_lb.main.dns_name}"
 }
 
 output "ecr_repository_url" {
@@ -23,9 +23,4 @@ output "ecs_service" {
 output "db_address" {
   description = "Адреса RDS — доступна лише зсередини VPC"
   value       = aws_db_instance.main.address
-}
-
-output "dashboard_url" {
-  description = "Дашборд моніторингу в консолі AWS"
-  value       = "https://${var.region}.console.aws.amazon.com/cloudwatch/home?region=${var.region}#dashboards:name=${aws_cloudwatch_dashboard.main.dashboard_name}"
 }

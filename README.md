@@ -1,49 +1,34 @@
-# Mini Blog API — лабораторні з хмарних технологій
+# Mini Blog API — лабораторна 1 з хмарних технологій
 
 REST API «міні-блог»: користувачі та їхні пости. Python 3.12, FastAPI, SQLAlchemy 2, Alembic, PostgreSQL 16.
-Запускається локально через Docker Compose, у хмарі — AWS (ECS Fargate + RDS + ALB, Terraform).
+Запускається локально через Docker Compose, у хмарі — AWS (ECS Fargate + RDS + ALB, Terraform, CD через GitHub Actions).
 
-**Публічна адреса:** показує `terraform output app_url`: `https://<app_hostname>`, якщо налаштовано домен (розділ «HTTPS і домен»), інакше `http://…elb.amazonaws.com`.
+**Публічна адреса:** `terraform output app_url` (`http://…elb.amazonaws.com`).
 _(Після `terraform destroy` застосунок недоступний; адреса з'являється після `apply`.)_
 **Документація API (Swagger UI):** `/docs`
 
 ## Ендпоінти
 
-Читання відкрите всім, запис потребує JWT-токена (`Authorization: Bearer <токен>`).
-Без токена захищені ендпоінти повертають **401**.
+| Метод | Шлях | Опис | Коди |
+|---|---|---|---|
+| GET | `/health` | Health check для балансувальника + ім'я екземпляра | 200 |
+| POST | `/users` | Створити користувача `{email, name}` | 201, 409 email зайнятий, 422 |
+| GET | `/users?limit=&offset=` | Список користувачів | 200 |
+| GET | `/users/{id}` | Користувач | 200, 404 |
+| GET | `/users/{id}/posts` | Пости користувача | 200, 404 |
+| POST | `/posts` | Створити пост `{title, body, author_id}` | 201, 404 автора немає, 422 |
+| GET | `/posts?limit=&offset=` | Список постів, найновіші першими | 200 |
+| GET | `/posts/{id}` | Пост за id | 200, 404 |
+| DELETE | `/posts/{id}` | Видалити пост | 204, 404 |
 
-| Метод | Шлях | Опис | Автент. | Коди |
-|---|---|---|---|---|
-| GET | `/health` | Health check для балансувальника + ім'я екземпляра | — | 200 |
-| POST | `/auth/register` | Реєстрація `{email, name, password≥8}` | — | 201, 409 email зайнятий, 422 |
-| POST | `/auth/login` | Вхід `{email, password}` → `{access_token}` (діє 60 хв) | — | 200, 401 |
-| GET | `/auth/me` | Поточний користувач | ✔ | 200, 401 |
-| GET | `/users?limit=&offset=` | Список користувачів | — | 200 |
-| GET | `/users/{id}` | Користувач (дані автора) | — | 200, 404 |
-| GET | `/users/{id}/posts` | Пости користувача | — | 200, 404 |
-| POST | `/posts` | Створити пост `{title, body}`; автор — власник токена | ✔ | 201, 401, 422 |
-| GET | `/posts?limit=&offset=` | Список постів, найновіші першими | — | 200 |
-| GET | `/posts/{id}` | Пост за id | — | 200, 404 |
-| DELETE | `/posts/{id}` | Видалити власний пост | ✔ | 204, 401, 403 чужий, 404 |
-
-`limit` — від 1 до 100 (за замовчуванням 20). У Swagger UI (`/docs`) кнопка **Authorize** підставляє токен.
-
-Паролі зберігаються як scrypt-хеш із сіллю. Ключ підпису JWT (`JWT_SECRET`) в AWS генерує Terraform
-і кладе в Secrets Manager; локально береться з `.env`.
-
-## Моніторинг
-
-CloudWatch: логи контейнера (`/ecs/cloud-labs`), дашборд `cloud-labs` (запити, 5xx, латентність p50/p95/p99,
-CPU, пам'ять, здорові екземпляри, останні логи) і два алерти на email через SNS — помилки 5xx та
-нездорові екземпляри. Усе в `terraform/app/monitoring.tf`. Після `apply` треба підтвердити підписку
-SNS у листі від AWS.
+`limit` — від 1 до 100 (за замовчуванням 20).
 
 ## Локальний запуск
 
 Потрібен лише Docker Desktop — Python на хості не потрібен.
 
 ```bash
-cp .env.example .env          # один раз; змінити пароль і JWT_SECRET (openssl rand -hex 32)
+cp .env.example .env          # один раз; змінити пароль
 docker compose up -d --build
 ```
 
@@ -54,19 +39,19 @@ docker compose up -d --build
 
 Приклад:
 ```bash
-curl -X POST localhost:8000/auth/register -H "Content-Type: application/json" \
-  -d '{"email":"ann@example.com","name":"Ann","password":"correct-horse"}'
-TOKEN=$(curl -s -X POST localhost:8000/auth/login -H "Content-Type: application/json" \
-  -d '{"email":"ann@example.com","password":"correct-horse"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
-curl -X POST localhost:8000/posts -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" \
-  -d '{"title":"Перший пост","body":"Привіт з контейнера"}'
+curl -X POST localhost:8000/users -H "Content-Type: application/json" \
+  -d '{"email":"ann@example.com","name":"Ann"}'
+curl -X POST localhost:8000/posts -H "Content-Type: application/json" \
+  -d '{"title":"Перший пост","body":"Привіт з контейнера","author_id":1}'
 curl localhost:8000/posts
 ```
+
+Весь сценарій перевірки (створення, 409, 422, 404, видалення) виконує `./scripts/demo.sh <адреса>`.
 
 ## Архітектура в AWS
 
 ```
-Інтернет ──:80 HTTP (або :443 HTTPS, якщо є домен)──▶ ALB (публічні підмережі, 2 зони)
+Інтернет ──:80 HTTP──▶ ALB (публічні підмережі, 2 зони)
                    │ health check /health
                    ▼ :8000
             ECS Fargate, ARM64 (приватні підмережі) ──:5432──▶ RDS PostgreSQL 16 (приватні підмережі)
@@ -76,31 +61,10 @@ curl localhost:8000/posts
 GitHub Actions ──OIDC──▶ IAM-роль ──▶ ECR (образ:хеш_коміту) ──▶ оновлення ECS service
 ```
 
-- За наявності власного домену трафік до балансувальника шифрується (HTTPS, сертифікат ACM; порт 80 лише перенаправляє).
-  TLS закінчується на ALB, а всередині приватної мережі запит іде контейнеру звичайним HTTP. Без домену працює HTTP.
 - З інтернету видно лише балансувальник. Контейнери й база не мають публічних адрес.
 - Security group бази пускає лише security group застосунку, а та — лише security group ALB.
-- Пароль до бази генерує AWS (RDS managed password); ECS передає його в контейнер як `DB_PASSWORD`.
+- Пароль до бази генерує AWS (RDS managed password) і зберігає в Secrets Manager; ECS передає його в контейнер як `DB_PASSWORD`.
 - CI/CD не має збережених ключів: GitHub отримує тимчасові облікові дані через OIDC.
-
-## HTTPS і домен (необов'язково)
-
-За замовчуванням застосунок працює по HTTP. Щоб увімкнути HTTPS, потрібен власний домен: достатньо вписати `domain_name` та `app_hostname`
-у `terraform.tfvars` обох модулів (порожні значення = без HTTPS).
-
-Сертифікат ACM видається лише на ім'я з вашого домену (на адресу `*.elb.amazonaws.com` AWS сертифікатів не видає),
-тому потрібен домен. DNS-зона та сертифікат створюються в `terraform/account` (живуть постійно, ≈ $0,5/міс за зону),
-а запис про адресу й HTTPS-listener на балансувальнику — в `terraform/app` (створюються й видаляються разом з ним).
-
-Один раз, перед першим розгортанням:
-```bash
-cd terraform/account                      # у terraform.tfvars вписати domain_name і app_hostname
-terraform init
-terraform apply -target=aws_route53_zone.main     # створити зону
-terraform output name_servers             # вписати ці 4 сервери імен у реєстратора домену
-# зачекати 5–30 хв, поки оновиться DNS, потім:
-terraform apply                           # видасть і підтвердить сертифікат
-```
 
 ## Розгортання з нуля
 
@@ -114,7 +78,7 @@ terraform init && terraform apply
 
 # 2. Уся інфраструктура лаби (~10–15 хв, найдовше створюється RDS)
 cd ../app
-cp terraform.tfvars.example terraform.tfvars   # вписати github_repo, домен, пошту, github_oidc_subject_prefix
+cp terraform.tfvars.example terraform.tfvars   # вписати github_repo і github_oidc_subject_prefix
 terraform init && terraform apply
 
 # 3. Передати GitHub ARN ролі для деплою і запустити перший деплой
@@ -146,8 +110,6 @@ pytest
 .
 ├── app/
 │   ├── main.py          # створення FastAPI, /health
-│   ├── security.py      # хешування паролів (scrypt), створення і перевірка JWT
-│   ├── auth.py          # залежність get_current_user (401 без дійсного токена)
 │   ├── config.py        # налаштування зі змінних середовища (DATABASE_URL або DB_*)
 │   ├── db.py            # підключення до БД, сесія на запит
 │   ├── models.py        # таблиці users і posts (SQLAlchemy)
@@ -155,6 +117,7 @@ pytest
 │   └── routers/         # ендпоінти users і posts
 ├── alembic/versions/    # міграції схеми БД
 ├── tests/               # pytest
+├── scripts/             # demo.sh (перевірка API), verify-clean.sh (чи все видалено)
 ├── terraform/
 │   ├── account/         # бюджет зі сповіщеннями (живе постійно)
 │   └── app/             # мережа, security groups, ECR, RDS, ECS, ALB, OIDC-роль для CI

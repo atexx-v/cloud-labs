@@ -1,17 +1,12 @@
-# Запуск контейнера: ECS Fargate (завдання 2)
-
 resource "aws_cloudwatch_log_group" "app" {
   name              = "/ecs/${var.project}"
-  retention_in_days = 7 # зберігання логів платне; тиждень достатньо для лаби
+  retention_in_days = 7
 }
 
 resource "aws_ecs_cluster" "main" {
   name = var.project
 }
 
-# --- IAM-ролі ---
-
-# Обидві ролі може «приміряти» лише сервіс ECS Tasks
 data "aws_iam_policy_document" "ecs_tasks_assume" {
   statement {
     actions = ["sts:AssumeRole"]
@@ -22,8 +17,6 @@ data "aws_iam_policy_document" "ecs_tasks_assume" {
   }
 }
 
-# Execution role — права самого ECS ДО запуску контейнера:
-# стягнути образ з ECR, прочитати секрет, створити потік логів
 resource "aws_iam_role" "task_execution" {
   name               = "${var.project}-task-execution"
   assume_role_policy = data.aws_iam_policy_document.ecs_tasks_assume.json
@@ -34,34 +27,10 @@ resource "aws_iam_role_policy_attachment" "task_execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
-# Ключ підпису JWT (бонус 6). Генерується тут і ніколи не потрапляє в код чи git;
-# значення лежить у Secrets Manager, а в контейнер приходить змінною JWT_SECRET.
-# Увага: значення також є в стані Terraform (terraform.tfstate) — тому стан не комітиться.
-resource "random_password" "jwt" {
-  length  = 48
-  special = false # лише літери й цифри: безпечно передавати змінною середовища
-}
-
-resource "aws_secretsmanager_secret" "jwt" {
-  name = "${var.project}/jwt-secret"
-  # Негайне видалення: інакше після destroy ім'я секрету «зайняте» 7–30 днів,
-  # і наступний apply з нуля впаде
-  recovery_window_in_days = 0
-}
-
-resource "aws_secretsmanager_secret_version" "jwt" {
-  secret_id     = aws_secretsmanager_secret.jwt.id
-  secret_string = random_password.jwt.result
-}
-
-# Читати можна лише два секрети — пароль нашої бази і ключ JWT (принцип найменших привілеїв)
 data "aws_iam_policy_document" "read_db_secret" {
   statement {
-    actions = ["secretsmanager:GetSecretValue"]
-    resources = [
-      aws_db_instance.main.master_user_secret[0].secret_arn,
-      aws_secretsmanager_secret.jwt.arn,
-    ]
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [aws_db_instance.main.master_user_secret[0].secret_arn]
   }
 }
 
@@ -71,9 +40,6 @@ resource "aws_iam_role_policy" "task_execution_db_secret" {
   policy = data.aws_iam_policy_document.read_db_secret.json
 }
 
-# Task role — права коду застосунку ПІД ЧАС роботи.
-# Застосунку AWS API не потрібні; єдине — канал для ECS Exec,
-# щоб на захисті зайти в контейнер і показати дані в приватній базі
 resource "aws_iam_role" "task" {
   name               = "${var.project}-task"
   assume_role_policy = data.aws_iam_policy_document.ecs_tasks_assume.json
@@ -87,7 +53,7 @@ data "aws_iam_policy_document" "ecs_exec" {
       "ssmmessages:OpenControlChannel",
       "ssmmessages:OpenDataChannel",
     ]
-    resources = ["*"] # ці дії не підтримують обмеження за ресурсом
+    resources = ["*"]
   }
 }
 
@@ -97,18 +63,15 @@ resource "aws_iam_role_policy" "task_ecs_exec" {
   policy = data.aws_iam_policy_document.ecs_exec.json
 }
 
-# --- Task definition: «рецепт» запуску контейнера ---
-
 resource "aws_ecs_task_definition" "app" {
   family                   = var.project
   requires_compatibilities = ["FARGATE"]
-  network_mode             = "awsvpc" # кожна задача отримує власний мережевий інтерфейс і IP
+  network_mode             = "awsvpc"
   cpu                      = var.app_cpu
   memory                   = var.app_memory
   execution_role_arn       = aws_iam_role.task_execution.arn
   task_role_arn            = aws_iam_role.task.arn
 
-  # ARM64 (Graviton): дешевше за x86 і та сама архітектура, що й Mac на Apple Silicon
   runtime_platform {
     operating_system_family = "LINUX"
     cpu_architecture        = "ARM64"
@@ -121,7 +84,6 @@ resource "aws_ecs_task_definition" "app" {
 
     portMappings = [{ containerPort = 8000, protocol = "tcp" }]
 
-    # Несекретні параметри підключення — звичайні змінні середовища
     environment = [
       { name = "DB_HOST", value = aws_db_instance.main.address },
       { name = "DB_PORT", value = tostring(aws_db_instance.main.port) },
@@ -130,20 +92,13 @@ resource "aws_ecs_task_definition" "app" {
       { name = "DB_SSLMODE", value = "require" },
     ]
 
-    # Пароль: ECS сам читає його з Secrets Manager при старті задачі.
-    # ":password::" — взяти з JSON-секрету лише поле password
     secrets = [
       {
         name      = "DB_PASSWORD"
         valueFrom = "${aws_db_instance.main.master_user_secret[0].secret_arn}:password::"
       },
-      {
-        name      = "JWT_SECRET"
-        valueFrom = aws_secretsmanager_secret.jwt.arn
-      },
     ]
 
-    # stdout контейнера → CloudWatch Logs
     logConfiguration = {
       logDriver = "awslogs"
       options = {
@@ -155,12 +110,6 @@ resource "aws_ecs_task_definition" "app" {
   }])
 }
 
-# --- Очищення ревізій task definition під час `terraform destroy` ---
-# Terraform створює лише першу ревізію task definition, а кожен деплой через GitHub Actions
-# реєструє нову, про яку Terraform не знає. Без цього ресурсу вони лишались би в акаунті
-# після `destroy` (безкоштовно, але методичка вимагає «destroy без залишку»).
-# Сервіс залежить від цього ресурсу, тому при знищенні спочатку зупиняється сервіс,
-# а вже потім виконується очищення. on_failure = continue: збій очищення не блокує destroy.
 resource "terraform_data" "cleanup_task_definitions" {
   input = {
     region = var.region
@@ -180,8 +129,6 @@ resource "terraform_data" "cleanup_task_definitions" {
   }
 }
 
-# --- Service: тримає потрібну кількість запущених задач ---
-
 resource "aws_ecs_service" "app" {
   name            = var.project
   cluster         = aws_ecs_cluster.main.id
@@ -189,12 +136,12 @@ resource "aws_ecs_service" "app" {
   desired_count   = var.desired_count
   launch_type     = "FARGATE"
 
-  enable_execute_command = true # ECS Exec — зайти в контейнер на захисті
+  enable_execute_command = true
 
   network_configuration {
     subnets          = aws_subnet.private[*].id
     security_groups  = [aws_security_group.app.id]
-    assign_public_ip = false # контейнер не видно з інтернету — лише через ALB
+    assign_public_ip = false
   }
 
   load_balancer {
@@ -203,22 +150,16 @@ resource "aws_ecs_service" "app" {
     container_port   = 8000
   }
 
-  # Час на старт (міграції + запуск uvicorn), перш ніж health check ALB почне рахуватись
   health_check_grace_period_seconds = 60
 
-  # Якщо нова версія не проходить health check — ECS сам відкочує на попередню
   deployment_circuit_breaker {
     enable   = true
     rollback = true
   }
 
-  # Listener має існувати раніше за сервіс, інакше ECS не зможе підключитись до ALB
-  depends_on = [aws_lb_listener.http, aws_lb_listener.https, terraform_data.cleanup_task_definitions]
+  depends_on = [aws_lb_listener.http, terraform_data.cleanup_task_definitions]
 
   lifecycle {
-    # Нові ревізії task definition (з новим тегом образу) реєструє CI.
-    # Без ignore_changes наступний terraform apply відкотив би сервіс
-    # на ревізію з тегом "bootstrap"
     ignore_changes = [task_definition]
   }
 }

@@ -1,18 +1,14 @@
-# Секрети
 .env
 *.tfvars
 !*.tfvars.example
 
-# Terraform: стан містить паролі і зберігається не в git
 .terraform/
 *.tfstate
 *.tfstate.*
 
-# Python
 __pycache__/
 *.pyc
 .venv/
 .pytest_cache/
 
-# macOS
 .DS_Store

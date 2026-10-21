@@ -1,12 +1,3 @@
-# Security groups — брандмауер на рівні кожного ресурсу (завдання 3 і 4).
-#
-#   інтернет ──:80──▶ [alb] ──:8000──▶ [app] ──:5432──▶ [db]
-#
-# Правила посилаються на security group, а не на IP-діапазони: адреси
-# контейнерів змінюються при кожному деплої, а членство в групі — ні.
-# Terraform видаляє стандартне правило AWS «весь вихідний трафік дозволено»,
-# тому кожен дозволений напрямок описаний явно.
-
 resource "aws_security_group" "alb" {
   name        = "${var.project}-alb"
   description = "ALB: HTTP from the internet"
@@ -25,23 +16,9 @@ resource "aws_security_group" "db" {
   vpc_id      = aws_vpc.main.id
 }
 
-# --- ALB ---
-
-# Єдині правила в усьому проєкті, відкриті для всього інтернету: 80 (HTTP) і, якщо увімкнено HTTPS,
-# 443 (тоді порт 80 лише перенаправляє на нього)
-resource "aws_vpc_security_group_ingress_rule" "alb_https" {
-  count             = local.https ? 1 : 0
-  security_group_id = aws_security_group.alb.id
-  description       = "HTTPS from anywhere"
-  cidr_ipv4         = "0.0.0.0/0"
-  ip_protocol       = "tcp"
-  from_port         = 443
-  to_port           = 443
-}
-
 resource "aws_vpc_security_group_ingress_rule" "alb_http" {
   security_group_id = aws_security_group.alb.id
-  description       = "HTTP from anywhere (redirects to HTTPS)"
+  description       = "HTTP from anywhere"
   cidr_ipv4         = "0.0.0.0/0"
   ip_protocol       = "tcp"
   from_port         = 80
@@ -56,8 +33,6 @@ resource "aws_vpc_security_group_egress_rule" "alb_to_app" {
   from_port                    = 8000
   to_port                      = 8000
 }
-
-# --- Застосунок ---
 
 resource "aws_vpc_security_group_ingress_rule" "app_from_alb" {
   security_group_id            = aws_security_group.app.id
@@ -77,7 +52,6 @@ resource "aws_vpc_security_group_egress_rule" "app_to_db" {
   to_port                      = 5432
 }
 
-# HTTPS назовні (через NAT) — до API AWS: ECR, Secrets Manager, CloudWatch Logs, SSM (ECS Exec)
 resource "aws_vpc_security_group_egress_rule" "app_https" {
   security_group_id = aws_security_group.app.id
   description       = "HTTPS to AWS APIs via NAT"
@@ -87,9 +61,6 @@ resource "aws_vpc_security_group_egress_rule" "app_https" {
   to_port           = 443
 }
 
-# --- База даних ---
-
-# Дослівна вимога завдання 3: підключення лише від security group застосунку
 resource "aws_vpc_security_group_ingress_rule" "db_from_app" {
   security_group_id            = aws_security_group.db.id
   description                  = "Only from app security group"
@@ -98,4 +69,3 @@ resource "aws_vpc_security_group_ingress_rule" "db_from_app" {
   from_port                    = 5432
   to_port                      = 5432
 }
-# Вихідних правил для БД немає: вона сама нікуди не підключається
