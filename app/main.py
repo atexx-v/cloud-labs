@@ -6,7 +6,7 @@ from fastapi.responses import RedirectResponse
 from app.routers import posts, users
 
 app = FastAPI(
-    title="Mini Blog API",
+    title="Mini Blog API 2.0",
     version="1.0.0",
     description="REST API для лабораторних з хмарних технологій: користувачі та їхні пости.",
 )
@@ -18,7 +18,7 @@ INSTANCE = socket.gethostname()
 
 @app.get("/health", tags=["service"])
 def health():
-    return {"status": "ok", "instance": INSTANCE, "version": "1.0"}
+    return {"status": "ok", "instance": INSTANCE, "version": "1.1"}
 
 @app.get("/", include_in_schema=False)
 def root():
