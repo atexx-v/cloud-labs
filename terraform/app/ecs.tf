@@ -95,6 +95,8 @@ resource "aws_ecs_task_definition" "app" {
       { name = "DB_NAME", value = aws_db_instance.main.db_name },
       { name = "DB_USER", value = aws_db_instance.main.username },
       { name = "DB_SSLMODE", value = "require" },
+      { name = "REDIS_URL", value = "redis://${aws_elasticache_cluster.cache.cache_nodes[0].address}:${aws_elasticache_cluster.cache.cache_nodes[0].port}/0" },
+      { name = "CACHE_TTL_SECONDS", value = tostring(var.cache_ttl_seconds) },
     ]
 
     secrets = [

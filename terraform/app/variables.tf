@@ -79,3 +79,14 @@ variable "db_instance_class" {
   type    = string
   default = "db.t4g.micro"
 }
+
+variable "cache_node_type" {
+  type    = string
+  default = "cache.t4g.micro"
+}
+
+variable "cache_ttl_seconds" {
+  description = "Час життя запису в кеші списку постів, с"
+  type        = number
+  default     = 30
+}

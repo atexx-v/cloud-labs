@@ -69,3 +69,27 @@ resource "aws_vpc_security_group_ingress_rule" "db_from_app" {
   from_port                    = 5432
   to_port                      = 5432
 }
+
+resource "aws_security_group" "cache" {
+  name        = "${var.project}-cache"
+  description = "Redis: only from app containers"
+  vpc_id      = aws_vpc.main.id
+}
+
+resource "aws_vpc_security_group_egress_rule" "app_to_cache" {
+  security_group_id            = aws_security_group.app.id
+  description                  = "Redis"
+  referenced_security_group_id = aws_security_group.cache.id
+  ip_protocol                  = "tcp"
+  from_port                    = 6379
+  to_port                      = 6379
+}
+
+resource "aws_vpc_security_group_ingress_rule" "cache_from_app" {
+  security_group_id            = aws_security_group.cache.id
+  description                  = "Only from app security group"
+  referenced_security_group_id = aws_security_group.app.id
+  ip_protocol                  = "tcp"
+  from_port                    = 6379
+  to_port                      = 6379
+}
