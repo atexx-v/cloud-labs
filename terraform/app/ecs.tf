@@ -5,6 +5,11 @@ resource "aws_cloudwatch_log_group" "app" {
 
 resource "aws_ecs_cluster" "main" {
   name = var.project
+
+  setting {
+    name  = "containerInsights"
+    value = "enabled"
+  }
 }
 
 data "aws_iam_policy_document" "ecs_tasks_assume" {
@@ -160,6 +165,6 @@ resource "aws_ecs_service" "app" {
   depends_on = [aws_lb_listener.http, terraform_data.cleanup_task_definitions]
 
   lifecycle {
-    ignore_changes = [task_definition]
+    ignore_changes = [task_definition, desired_count]
   }
 }

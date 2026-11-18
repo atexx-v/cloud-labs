@@ -42,9 +42,37 @@ variable "app_memory" {
 }
 
 variable "desired_count" {
-  description = "Кількість екземплярів застосунку"
+  description = "Початкова кількість екземплярів; далі нею керує автоскейлінг"
   type        = number
   default     = 1
+}
+
+variable "min_instances" {
+  type    = number
+  default = 1
+}
+
+variable "max_instances" {
+  type    = number
+  default = 4
+}
+
+variable "cpu_target_percent" {
+  description = "Цільове середнє завантаження CPU по сервісу, %"
+  type        = number
+  default     = 50
+}
+
+variable "scale_out_cooldown" {
+  description = "Пауза після додавання екземпляра, с"
+  type        = number
+  default     = 60
+}
+
+variable "scale_in_cooldown" {
+  description = "Пауза після вилучення екземпляра, с"
+  type        = number
+  default     = 300
 }
 
 variable "db_instance_class" {
