@@ -90,3 +90,18 @@ variable "cache_ttl_seconds" {
   type        = number
   default     = 30
 }
+
+variable "alert_email" {
+  description = "Адреса для сповіщень CloudWatch (після apply підтвердити підписку за листом від AWS)"
+  type        = string
+}
+
+variable "alert_cpu_threshold" {
+  type    = number
+  default = 70
+}
+
+variable "alert_evaluation_minutes" {
+  type    = number
+  default = 2
+}
