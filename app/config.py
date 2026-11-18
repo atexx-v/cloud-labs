@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     db_name: Optional[str] = None
     db_sslmode: str = "prefer"
 
+    redis_url: Optional[str] = None
+    cache_ttl_seconds: int = 30
+
     @field_validator("database_url")
     @classmethod
     def use_psycopg3(cls, v: Optional[str]) -> Optional[str]:
