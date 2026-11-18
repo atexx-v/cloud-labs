@@ -128,3 +128,11 @@ pytest
 ├── compose.yaml         # застосунок + PostgreSQL локально
 └── .env.example         # шаблон секретів (сам .env не комітиться)
 ```
+
+## Лабораторна 2: масштабування, моніторинг, кеш
+
+- Автоскейлінг (ECS Service Auto Scaling, 1–4 екземпляри): `terraform/app/autoscaling.tf`, `docs/AUTOSCALING.md`
+- Навантажувальний тест (Locust): `loadtest/`, `docs/LOADTEST.md`
+- Дашборд CloudWatch: `terraform/app/dashboard.tf`
+- Сповіщення (CloudWatch alarm + SNS e-mail): `terraform/app/alerts.tf`, `docs/ALERTS.md`
+- Кеш Redis (ElastiCache, cache-aside для `GET /posts`): `app/cache.py`, `terraform/app/cache.tf`, `docs/CACHE.md`
