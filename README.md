@@ -1,43 +1,47 @@
-# Mini Blog API — лабораторна 1 з хмарних технологій
+# Mini Blog API
 
-REST API «міні-блог»: користувачі та їхні пости. Python 3.12, FastAPI, SQLAlchemy 2, Alembic, PostgreSQL 16.
-Запускається локально через Docker Compose, у хмарі — AWS (ECS Fargate + RDS + ALB, Terraform, CD через GitHub Actions).
+Невеликий REST API для блогу: користувачі й пости. Написаний на Python 3.12 (FastAPI, SQLAlchemy 2, Alembic) з PostgreSQL 16.
+Локально все піднімається однією командою через Docker Compose, а в хмарі працює на AWS: ECS Fargate, RDS, ALB і Redis,
+усе описано в Terraform, а деплоїться через GitHub Actions.
 
-**Публічна адреса:** `terraform output app_url` (`http://…elb.amazonaws.com`).
-_(Після `terraform destroy` застосунок недоступний; адреса з'являється після `apply`.)_
-**Документація API (Swagger UI):** `/docs`
+Це моя робота з хмарних технологій. Лабораторна 1 — контейнер, Terraform, база, балансувальник і CD.
+Лабораторна 2 — автоскейлінг, навантажувальний тест, дашборд, алерти й кеш (розділ про неї нижче).
 
-## Ендпоінти
+Адреса застосунку в хмарі з'являється після `terraform apply` (`terraform output app_url`). Поки інфраструктура
+не піднята, вона недоступна: після захисту я роблю `terraform destroy`, щоб не платити за простій.
+Документація API (Swagger UI) лежить на `/docs`.
 
-| Метод | Шлях | Опис | Коди |
+## Що вміє API
+
+| Метод | Шлях | Що робить | Коди відповіді |
 |---|---|---|---|
-| GET | `/health` | Health check для балансувальника + ім'я екземпляра | 200 |
-| POST | `/users` | Створити користувача `{email, name}` | 201, 409 email зайнятий, 422 |
-| GET | `/users?limit=&offset=` | Список користувачів | 200 |
-| GET | `/users/{id}` | Користувач | 200, 404 |
-| GET | `/users/{id}/posts` | Пости користувача | 200, 404 |
-| POST | `/posts` | Створити пост `{title, body, author_id}` | 201, 404 автора немає, 422 |
-| GET | `/posts?limit=&offset=` | Список постів, найновіші першими | 200 |
-| GET | `/posts/{id}` | Пост за id | 200, 404 |
-| DELETE | `/posts/{id}` | Видалити пост | 204, 404 |
+| GET | `/health` | перевірка для балансувальника, повертає ім'я екземпляра | 200 |
+| POST | `/users` | створює користувача `{email, name}` | 201, 409 (email зайнятий), 422 |
+| GET | `/users?limit=&offset=` | список користувачів | 200 |
+| GET | `/users/{id}` | один користувач | 200, 404 |
+| GET | `/users/{id}/posts` | пости користувача | 200, 404 |
+| POST | `/posts` | створює пост `{title, body, author_id}` | 201, 404 (автора немає), 422 |
+| GET | `/posts?limit=&offset=` | список постів, найновіші першими | 200 |
+| GET | `/posts/{id}` | пост за id | 200, 404 |
+| DELETE | `/posts/{id}` | видаляє пост | 204, 404 |
 
-`limit` — від 1 до 100 (за замовчуванням 20).
+`limit` може бути від 1 до 100, за замовчуванням 20.
 
-## Локальний запуск
+## Запуск на своєму комп'ютері
 
-Потрібен лише Docker Desktop — Python на хості не потрібен.
+Потрібен лише Docker Desktop, Python на машині ставити не треба.
 
 ```bash
-cp .env.example .env          # один раз; змінити пароль
+cp .env.example .env          # один раз, і замінити пароль
 docker compose up -d --build
 ```
 
-- API: http://localhost:8000 (перенаправляє на Swagger UI)
-- При старті контейнер сам накатує міграції (`alembic upgrade head`)
-- Дані — у volume `pgdata`: переживають `docker compose down`, видаляються лише `docker compose down -v`
-- Порт бази назовні не опублікований
+API відкриється на http://localhost:8000 і одразу перекине на Swagger. Міграції контейнер накатує сам при старті
+(`alembic upgrade head`). Дані лежать у volume `pgdata`, тож переживають `docker compose down`; стираються
+вони тільки через `docker compose down -v`. Порт бази назовні я не відкривав.
 
-Приклад:
+Швидка перевірка руками:
+
 ```bash
 curl -X POST localhost:8000/users -H "Content-Type: application/json" \
   -d '{"email":"ann@example.com","name":"Ann"}'
@@ -46,93 +50,111 @@ curl -X POST localhost:8000/posts -H "Content-Type: application/json" \
 curl localhost:8000/posts
 ```
 
-Весь сценарій перевірки (створення, 409, 422, 404, видалення) виконує `./scripts/demo.sh <адреса>`.
+А `./scripts/demo.sh <адреса>` проганяє весь сценарій: створення, 409, 422, 404 і видалення.
 
-## Архітектура в AWS
+## Як це влаштовано в AWS
 
 ```
-Інтернет ──:80 HTTP──▶ ALB (публічні підмережі, 2 зони)
-                   │ health check /health
+Інтернет ──:80──▶ ALB (публічні підмережі, 2 зони)
+                   │ перевірка /health
                    ▼ :8000
-            ECS Fargate, ARM64 (приватні підмережі) ──:5432──▶ RDS PostgreSQL 16 (приватні підмережі)
-                   │                                           пароль — у Secrets Manager
+            ECS Fargate, ARM64 (приватні підмережі) ──:5432──▶ RDS PostgreSQL 16
+                   │                                           пароль у Secrets Manager
+                   ├──:6379──▶ ElastiCache Redis (кеш)
                    └──▶ NAT Gateway ──▶ ECR, Secrets Manager, CloudWatch Logs
 
-GitHub Actions ──OIDC──▶ IAM-роль ──▶ ECR (образ:хеш_коміту) ──▶ оновлення ECS service
+GitHub Actions ──OIDC──▶ IAM-роль ──▶ ECR (образ з тегом = хеш коміту) ──▶ оновлення ECS service
 ```
 
-- З інтернету видно лише балансувальник. Контейнери й база не мають публічних адрес.
-- Security group бази пускає лише security group застосунку, а та — лише security group ALB.
-- Пароль до бази генерує AWS (RDS managed password) і зберігає в Secrets Manager; ECS передає його в контейнер як `DB_PASSWORD`.
-- CI/CD не має збережених ключів: GitHub отримує тимчасові облікові дані через OIDC.
+З інтернету видно лише балансувальник. Контейнери, база й Redis публічних адрес не мають. Доступ закритий ланцюжком
+security group: до бази пускає тільки група застосунку, до застосунку тільки група ALB.
+
+Пароль до бази генерує сам AWS (RDS managed password) і кладе в Secrets Manager, а ECS передає його в контейнер
+змінною `DB_PASSWORD`. У CI/CD жодних збережених ключів немає: GitHub отримує тимчасові облікові дані через OIDC,
+причому тільки для гілки `main`.
 
 ## Розгортання з нуля
 
-Потрібні: AWS CLI з налаштованим IAM-користувачем (`aws sts get-caller-identity`), Terraform ≥ 1.9, gh.
+Потрібні AWS CLI з налаштованим IAM-користувачем (перевірити: `aws sts get-caller-identity`), Terraform 1.9 або новіший і gh.
 
 ```bash
-# 1. Бюджет зі сповіщеннями — один раз, не видаляється між заняттями
+# 1. Бюджет зі сповіщеннями. Робиться один раз і між заняттями не видаляється
 cd terraform/account
-cp terraform.tfvars.example terraform.tfvars   # вписати пошту
+cp terraform.tfvars.example terraform.tfvars   # вписати свою пошту
 terraform init && terraform apply
 
-# 2. Уся інфраструктура лаби (~10–15 хв, найдовше створюється RDS)
+# 2. Уся інфраструктура лаби (10–15 хвилин, найдовше піднімається RDS)
 cd ../app
-cp terraform.tfvars.example terraform.tfvars   # вписати github_repo і github_oidc_subject_prefix
+cp terraform.tfvars.example terraform.tfvars   # вписати github_repo, github_oidc_subject_prefix і alert_email
 terraform init && terraform apply
 
-# 3. Передати GitHub ARN ролі для деплою і запустити перший деплой
+# 3. Віддати GitHub ARN ролі для деплою й запустити перший деплой
 gh variable set AWS_ROLE_ARN --body "$(terraform output -raw github_deploy_role_arn)"
 gh workflow run deploy.yml
 terraform output app_url
 ```
 
-Після першого `apply` сервіс ще не має образу (тег `bootstrap`). Перший `gh workflow run`
-збирає образ, кладе його в ECR і оновлює сервіс. Далі кожен push у `main` деплоїться автоматично.
+Одразу після `apply` в ECR ще немає образу застосунку (є лише тег `bootstrap`). Перший запуск `deploy.yml` збирає образ,
+кладе його в ECR і оновлює сервіс. Далі кожен push у `main` деплоїться сам. Якщо змінної `AWS_ROLE_ARN` у репозиторії
+нема, job `deploy` просто пропускається, а тести все одно біжать.
 
-Прибрати все: `cd terraform/app && terraform destroy`. Разом з інфраструктурою Terraform видаляє й ревізії
-task definition, які створив CI (ресурс `terraform_data.cleanup_task_definitions`); перевірити, що в акаунті нічого
-не лишилось, можна скриптом `./scripts/verify-clean.sh`.
-Бюджет у `terraform/account` можна лишити — він безкоштовний.
+Знести все: `cd terraform/app && terraform destroy`. Разом з інфраструктурою Terraform прибирає й ревізії task definition,
+які створив CI. Що в акаунті справді нічого не лишилось, показує `./scripts/verify-clean.sh`.
+Бюджет у `terraform/account` можна лишити, він безкоштовний.
 
 ## Тести
 
-Працюють на SQLite у пам'яті, без Docker і Postgres:
+Вони йдуть на SQLite в пам'яті, а Redis підміняє fakeredis, тому ні Docker, ні Postgres не потрібні:
+
 ```bash
 python -m venv .venv && . .venv/bin/activate
 pip install -r requirements-dev.txt
 pytest
 ```
 
-## Структура
+## Лабораторна 2: масштабування, моніторинг, кеш
+
+Усе, що додалось у другій лабі, і де це шукати:
+
+- **Автоскейлінг.** ECS Service Auto Scaling тримає від 1 до 4 екземплярів так, щоб середнє CPU було близько 50 %.
+  Код у `terraform/app/autoscaling.tf`, пояснення, графіки й розбір затримок у [docs/AUTOSCALING.md](docs/AUTOSCALING.md).
+- **Навантажувальний тест.** Locust імітує 60 користувачів у профілі «мало записів, багато читань».
+  Сценарій і запуск у `loadtest/`, опис у [docs/LOADTEST.md](docs/LOADTEST.md).
+- **Дашборд CloudWatch.** П'ять графіків (екземпляри, CPU, запити, латентність p95, 5xx) описані в `terraform/app/dashboard.tf`.
+- **Алерти.** Якщо CPU тримається вище 70 % дві хвилини поспіль, тривога CloudWatch через SNS шле лист
+  (і ще один, коли все нормалізується). Код у `terraform/app/alerts.tf`, листи зі знімками в [docs/ALERTS.md](docs/ALERTS.md).
+- **Кеш.** `GET /posts` кешується в Redis (ElastiCache) за схемою cache-aside на 30 секунд. На тому самому навантаженні
+  p95 впав з 390 до 130 мс, а CPU контейнера з 96 до 57 %. Код у `app/cache.py` і `terraform/app/cache.tf`,
+  порівняння прогонів у [docs/CACHE.md](docs/CACHE.md).
+
+Одне чесне спостереження з тестів: автоскейлінг реагує не миттєво. Від моменту, коли CPU перетнув ціль, до появи нових
+екземплярів минало приблизно п'ять хвилин, а назад до одного екземпляра сервіс повертався майже пів години.
+Чому так, розписано в docs/AUTOSCALING.md.
+
+## Структура проєкту
 
 ```
 .
 ├── app/
 │   ├── main.py          # створення FastAPI, /health
-│   ├── config.py        # налаштування зі змінних середовища (DATABASE_URL або DB_*)
+│   ├── config.py        # налаштування зі змінних середовища
 │   ├── db.py            # підключення до БД, сесія на запит
 │   ├── models.py        # таблиці users і posts (SQLAlchemy)
-│   ├── schemas.py       # формати запитів/відповідей (Pydantic)
+│   ├── schemas.py       # формати запитів і відповідей (Pydantic)
+│   ├── cache.py         # клієнт Redis, get/set
 │   └── routers/         # ендпоінти users і posts
 ├── alembic/versions/    # міграції схеми БД
 ├── tests/               # pytest
+├── loadtest/            # сценарій Locust, run.sh, результати прогонів
+├── docs/                # документи до лаби 2 і знімки до них
 ├── scripts/             # demo.sh (перевірка API), verify-clean.sh (чи все видалено)
 ├── terraform/
 │   ├── account/         # бюджет зі сповіщеннями (живе постійно)
-│   └── app/             # мережа, security groups, ECR, RDS, ECS, ALB, OIDC-роль для CI
+│   └── app/             # мережа, ECR, RDS, ECS, ALB, автоскейлінг, Redis, дашборд, алерти, OIDC-роль
 ├── .github/workflows/
 │   └── deploy.yml       # тести → образ у ECR → деплой в ECS
 ├── Dockerfile
-├── docker-entrypoint.sh # міграції → запуск uvicorn
-├── compose.yaml         # застосунок + PostgreSQL локально
-└── .env.example         # шаблон секретів (сам .env не комітиться)
+├── docker-entrypoint.sh # міграції, потім uvicorn
+├── compose.yaml         # застосунок і PostgreSQL локально
+└── .env.example         # шаблон секретів (сам .env у git не потрапляє)
 ```
-
-## Лабораторна 2: масштабування, моніторинг, кеш
-
-- Автоскейлінг (ECS Service Auto Scaling, 1–4 екземпляри): `terraform/app/autoscaling.tf`, `docs/AUTOSCALING.md`
-- Навантажувальний тест (Locust): `loadtest/`, `docs/LOADTEST.md`
-- Дашборд CloudWatch: `terraform/app/dashboard.tf`
-- Сповіщення (CloudWatch alarm + SNS e-mail): `terraform/app/alerts.tf`, `docs/ALERTS.md`
-- Кеш Redis (ElastiCache, cache-aside для `GET /posts`): `app/cache.py`, `terraform/app/cache.tf`, `docs/CACHE.md`
